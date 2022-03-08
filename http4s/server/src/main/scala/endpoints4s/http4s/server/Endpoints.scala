@@ -391,7 +391,9 @@ trait EndpointsWithCustomErrors extends algebra.EndpointsWithCustomErrors with M
       ): Effect[Either[Http4sResponse, Out]] =
         entity(http4sRequest)
           .map { errorResponseOrEntityData =>
-            errorResponseOrEntityData.map(entityData => tuplerUBH(tuplerUB(urlAndHeaders._1, entityData), urlAndHeaders._2))
+            errorResponseOrEntityData.map(entityData =>
+              tuplerUBH(tuplerUB(urlAndHeaders._1, entityData), urlAndHeaders._2)
+            )
           }
 
     }

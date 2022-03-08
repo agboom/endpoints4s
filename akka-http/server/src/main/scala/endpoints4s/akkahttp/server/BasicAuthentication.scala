@@ -54,7 +54,9 @@ trait BasicAuthentication extends algebra.BasicAuthentication with EndpointsWith
           case Valid(Some(credentials)) =>
             matchAndProvideParsedUrlAndHeadersData(method, url, headers)
               .map { validatedUrlAndHeaders =>
-                validatedUrlAndHeaders.map { case (urlData, headersData) => (urlData, headersData, credentials) }
+                validatedUrlAndHeaders.map { case (urlData, headersData) =>
+                  (urlData, headersData, credentials)
+                }
               }
           case invalid: Invalid => Directives.provide(invalid)
         }
