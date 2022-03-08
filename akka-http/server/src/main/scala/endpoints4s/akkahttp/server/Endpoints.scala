@@ -447,8 +447,11 @@ trait EndpointsWithCustomErrors
           .parseEntityDirective(urlAndHeaders._1)
           .map(a => tupler(a, urlAndHeaders._2))
 
-      def uri(out: tupler.Out): Uri =
-        request.uri(tupler.unapply(out)._1) // TODO Add query parameter
+      def uri(out: tupler.Out): Uri = {
+        val (a, q) = tupler.unapply(out)
+        val outerUri = request.uri(a)
+        outerUri.withQuery(Uri.Query(outerUri.query() ++ qs.encode(q): _*))
+      }
     }
 
   override def addResponseHeaders[A, H](
