@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{HttpEntity, HttpHeader, HttpRequest, MediaTypes, Uri}
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.unmarshalling._
-import endpoints4s.algebra.Documentation
+import endpoints4s.algebra.{Documentation, Middleware}
 import endpoints4s._
 
 import scala.concurrent.Future
@@ -420,6 +420,33 @@ trait EndpointsWithCustomErrors
       f: EndpointDocs => EndpointDocs
   ): Endpoint[A, B] =
     endpoint
+
+  override def endpointMiddleware[A, B, C, D](
+      endpoint: Endpoint[A, B],
+      middleware: endpoints4s.algebra.Middleware[A, B, C, D]
+  ): Endpoint[C, D] = {
+    val request: Request[C] = new Request[C] {
+
+      type UrlAndHeaders = endpoint.request.UrlAndHeaders
+
+      def matchAndParseHeadersDirective: Directive1[Validated[UrlAndHeaders]] =
+        endpoint.request.matchAndParseHeadersDirective
+
+      def parseEntityDirective(urlAndHeaders: UrlAndHeaders): Directive1[C] = {
+        endpoint.request.parseEntityDirective(urlAndHeaders).flatMap { a =>
+          middleware.serverAction(a) match {
+            case Middleware.Bypass(b)   => StandardRoute(endpoint.response(b))
+            case Middleware.Continue(c) => Directives.provide(c)
+          }
+        }
+      }
+
+      def uri(c: C): Uri = endpoint.request.uri(middleware.fromNewRequest(c))
+    }
+    val response: Response[D] =
+      endpoint.response.compose(middleware.fromNewResponse)
+    Endpoint(request, response)
+  }
 
   override def addRequestHeaders[A, H](
       currentRequest: Request[A],

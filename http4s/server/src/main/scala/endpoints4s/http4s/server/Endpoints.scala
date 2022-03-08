@@ -2,7 +2,7 @@ package endpoints4s.http4s.server
 
 import cats.effect.Concurrent
 import cats.implicits._
-import endpoints4s.algebra.Documentation
+import endpoints4s.algebra.{Documentation, Middleware}
 import endpoints4s.{
   Invalid,
   PartialInvariantFunctor,
@@ -305,6 +305,38 @@ trait EndpointsWithCustomErrors extends algebra.EndpointsWithCustomErrors with M
       currentEndpoint: Endpoint[A, B],
       func: EndpointDocs => EndpointDocs
   ): Endpoint[A, B] = currentEndpoint
+
+  override def endpointMiddleware[A, B, C, D](
+      endpoint: Endpoint[A, B],
+      middleware: Middleware[A, B, C, D]
+  ): Endpoint[C, D] = {
+    val request: Request[C] = new Request[C] {
+
+      type UrlAndHeaders = endpoint.request.UrlAndHeaders
+
+      def matchAndParseHeaders(
+          http4sRequest: Http4sRequest
+      ): Option[Either[Http4sResponse, Validated[UrlAndHeaders]]] =
+        endpoint.request.matchAndParseHeaders(http4sRequest)
+
+      def parseEntity(
+          urlAndHeaders: UrlAndHeaders,
+          http4sRequest: Http4sRequest
+      ): Effect[Either[Http4sResponse, C]] =
+        endpoint.request.parseEntity(urlAndHeaders, http4sRequest).map { responseOrA =>
+          responseOrA.flatMap { a =>
+            middleware.serverAction(a) match {
+              case Middleware.Bypass(b)   => Left(endpoint.response(b))
+              case Middleware.Continue(c) => Right(c)
+            }
+          }
+        }
+    }
+    val response: Response[D] =
+      endpoint.response.compose(middleware.fromNewResponse)
+
+    Endpoint(request, response, endpoint.operationId)
+  }
 
   // REQUESTS
   implicit def requestPartialInvariantFunctor: PartialInvariantFunctor[Request] =

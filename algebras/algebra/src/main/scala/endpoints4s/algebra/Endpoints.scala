@@ -112,6 +112,12 @@ trait EndpointsWithCustomErrors extends Requests with Responses with Errors {
   ): Endpoint[A, B] =
     unsupportedInterpreter("1.6.0")
 
+  def endpointMiddleware[A, B, C, D](
+      endpoint: Endpoint[A, B],
+      middleware: Middleware[A, B, C, D]
+  ): Endpoint[C, D] =
+    unsupportedInterpreter("1.8.0")
+
   /** Extension methods for [[Endpoint]].
     *
     * @group operations
@@ -132,6 +138,19 @@ trait EndpointsWithCustomErrors extends Requests with Responses with Errors {
       */
     def mapDocs(func: EndpointDocs => EndpointDocs): Endpoint[A, B] =
       mapEndpointDocs(endpoint, func)
+
+    /** Apply the provided `middleware` to this endpoint.
+      *
+      * @param middleware Middleware to apply to this endpoint
+      * @tparam C         Information carried by the request of the endpoint resulting
+      *                   from the application of the middleware to this endpoint.
+      * @tparam D         Information carried by the response of the endpoint resulting
+      *                   from the application of the middleware to this endpoint.
+      * @return           And endpoint whose logic is partially implemented by the
+      *                   middleware, and which might even be bypassed by it.
+      */
+    def withMiddleware[C, D](middleware: Middleware[A, B, C, D]): Endpoint[C, D] =
+      endpointMiddleware(endpoint, middleware)
 
   }
 
