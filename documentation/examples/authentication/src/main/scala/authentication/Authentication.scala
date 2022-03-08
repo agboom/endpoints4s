@@ -268,12 +268,15 @@ trait ServerAuthentication[F[_]]
         // First, check whether the incoming request matches this request description
         matchAndParseHeadersAsRight(method, url, emptyRequestHeaders, http4sRequest)
           // If this is the case, check whether there is a token in the request headers or not
-          .map { errorResponseOrValidatedUrlAndHeaders =>
+          .map { errorResponseOrValidatedUrl =>
             authenticationTokenRequestHeaders(http4sRequest.headers) match {
-              // There is a token, just add it to the
+              // There is a token, just add it to the data parsed from the URL
               case Valid(Some(token)) =>
-                errorResponseOrValidatedUrlAndHeaders
-                  .map(_.map { case (u, _) => (u, token) })
+                errorResponseOrValidatedUrl
+                  .map { validatedUrl =>
+                    validatedUrl.map { case (urlData, _) => (urlData, token) }
+                  }
+              // Otherwise, return an Unauthorized response
               case _ => Left(org.http4s.Response(Unauthorized))
             }
           }
