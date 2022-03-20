@@ -12,6 +12,14 @@ class EndpointsCodecsTestApi
     with algebra.circe.CounterCodecCirce
     with algebra.BasicAuthenticationTestApi
     with algebra.SumTypedEntitiesTestApi
+    with algebra.AuthenticationTestApi
     with JsonEntitiesFromCodecs
     with ChunkedJsonEntities
-    with BasicAuthentication
+    with BasicAuthentication 
+    with Authentication {
+
+  type AccountData = String
+  
+  def validateBasicCredentials(credentials: BasicCredentials): ValidatedCredentials[AccountData] = 
+    Right("valid")
+}
