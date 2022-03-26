@@ -13,23 +13,55 @@ trait Authentication {
   case object ForbiddenError extends InvalidAuthentication
 
   type AccountData
+  
+  def extractCredentials(accountData: AccountData): String
 
   type ValidatedCredentials[B] = Either[InvalidAuthentication, B]
 
   def authenticationChallengeHeader: ResponseHeaders[Unit] =
-    responseHeader("WWW-Authenticate").xmap(_ => ())(_ => """Basic, charset="UTF-8"""")
+    responseHeader("WWW-Authenticate").xmap(_ => ())(_ => """Basic charset="UTF-8"""")
 
   def decodeBasicCredentials(credentials: String): Validated[BasicCredentials]
 
   def validateBasicCredentials(credentials: BasicCredentials): ValidatedCredentials[AccountData]
 
-  type AuthenticationData
+  def basicAuthenticationMiddleware2[A, B, ACred, AAccountData](implicit
+      tuplerACred: Tupler.Aux[A, Option[String], ACred],
+      tuplerAAccountData: Tupler.Aux[A, AccountData, AAccountData]
+  ): ShortcircuitMiddleware[InvalidAuthentication, ACred, B, AAccountData, B] =
+    new ShortcircuitMiddleware[InvalidAuthentication, ACred, B, AAccountData, B] {
+      def serverAction(
+          request: ACred
+      ): Middleware.Conditional[InvalidAuthentication, AAccountData] =
+        Middleware.Conditional {
+          val (a, credOpt) = tuplerACred.unapply(request)
+          credOpt match {
+            case Some(cred) =>
+              decodeBasicCredentials(cred) match {
+                case Valid(basicCredentials) =>
+                  validateBasicCredentials(basicCredentials)
+                    .map(tuplerAAccountData.apply(a, _))
+                case Invalid(_) =>
+                  Left(UnauthorizedError)
+              }
+            case None =>
+              Left(UnauthorizedError)
+          }
+        }
 
+      def fromNewRequest(newRequest: AAccountData): ACred = {
+        val (a, accountData) = tuplerAAccountData.unapply(newRequest)
+        tuplerACred(a, Some(extractCredentials(accountData)))
+      }
+
+      def fromNewResponse(newResponse: B): B = newResponse
+    }
+  
   def basicAuthenticationMiddleware[A, B, ACred, AAccountData](implicit
       tuplerACred: Tupler.Aux[A, Option[String], ACred],
       tuplerAAccountData: Tupler.Aux[A, AccountData, AAccountData]
-  ): Middleware[ACred, ValidatedCredentials[B], AAccountData, B] =
-    new Middleware[ACred, ValidatedCredentials[B], AAccountData, B] {
+  ): Middleware[ACred, ValidatedCredentials[B], AAccountData, ValidatedCredentials[B]] =
+    new Middleware[ACred, ValidatedCredentials[B], AAccountData, ValidatedCredentials[B]] {
       def serverAction(
           request: ACred
       ): Middleware.ServerAction[ValidatedCredentials[B], AAccountData] = {
@@ -40,32 +72,13 @@ trait Authentication {
           tuplerAAccountData.apply(a, accountData)
         }
       }
-      //  Middleware.Continue {
-      //    val (a, credOpt) = tuplerACred.unapply(request)
-      //    credOpt match {
-      //      case Some(cred) =>
-      //        decodeBasicCredentials(cred) match {
-      //          case Valid(basicCredentials) =>
-      //            validateBasicCredentials(basicCredentials)
-      //              .map(tuplerAAccountData.apply(a, _))
-      //          case Invalid(_) =>
-      //            Left(unauthorized)
-      //        }
-      //      case None =>
-      //        Left(unauthorized)
-      //    }
-      //  }
 
-      def fromNewResponse(newResponse: B): ValidatedCredentials[B] = ???
+      def fromNewResponse(newResponse: ValidatedCredentials[B]): ValidatedCredentials[B] = ???
 
-      def toNewResponse(response: ValidatedCredentials[B]): B = ???
+      def toNewResponse(response: ValidatedCredentials[B]): ValidatedCredentials[B] = ???
 
       def fromNewRequest(newRequest: AAccountData): ACred = ???
     }
-
-  //def requestWithBasicAuthentication[A](
-  //    request: Request[A]
-  //)(implicit tupler: Tupler[A, BasicCredentials]): Request[tupler.Out]
 
   def basicAuthorizationHeader: RequestHeaders[Option[String]] =
     optRequestHeader("Authorization")
@@ -85,7 +98,7 @@ trait Authentication {
       Forbidden,
       responseEntity(ForbiddenError),
       None,
-      authenticationChallengeHeader,
+      authenticationChallengeHeader
     )
 
   def authenticatedResponse[A](response: Response[A]): Response[ValidatedCredentials[A]] =
@@ -104,10 +117,11 @@ trait Authentication {
   )(implicit
       tuplerACred: Tupler.Aux[A, Option[String], ACred],
       tuplerAAccountData: Tupler.Aux[A, AccountData, AAccountData]
-  ): Endpoint[AAccountData, B] = {
-    endpoint
-      .mapRequest(_.addHeaders(basicAuthorizationHeader))
-      .mapResponse(authenticatedResponse(_))
-      .withMiddleware(basicAuthenticationMiddleware)
-  }
+  ): Endpoint[AAccountData, ValidatedCredentials[B]] =
+    endpointMiddlewareF(
+      endpoint
+        .mapRequest(_.addHeaders(basicAuthorizationHeader))
+        .mapResponse(authenticatedResponse(_)),
+      basicAuthenticationMiddleware2
+    )
 }

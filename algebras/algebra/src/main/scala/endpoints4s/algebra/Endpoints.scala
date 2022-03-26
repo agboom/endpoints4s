@@ -118,6 +118,12 @@ trait EndpointsWithCustomErrors extends Requests with Responses with Errors {
   ): Endpoint[C, D] =
     unsupportedInterpreter("1.8.0")
 
+  def endpointMiddlewareF[E, A, B, C, D](
+      endpoint: Endpoint[A, Either[E, B]],
+      middleware: ShortcircuitMiddleware[E, A, B, C, D]
+  ): Endpoint[C, Either[E, D]] =
+    unsupportedInterpreter("1.8.0")
+
   /** Extension methods for [[Endpoint]].
     *
     * @group operations

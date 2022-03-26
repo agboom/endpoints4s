@@ -19,6 +19,8 @@ class EndpointsCodecsTestApi
     with Authentication {
 
   type AccountData = String
+
+  def extractCredentials(accountData: String): String = accountData
   
   def validateBasicCredentials(credentials: BasicCredentials): ValidatedCredentials[AccountData] = 
     Right("valid")

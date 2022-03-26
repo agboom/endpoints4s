@@ -448,6 +448,38 @@ trait EndpointsWithCustomErrors
     Endpoint(request, response)
   }
 
+  override def endpointMiddlewareF[E, A, B, C, D](
+      endpoint: Endpoint[A, Either[E, B]],
+      middleware: endpoints4s.algebra.ShortcircuitMiddleware[E, A, B, C, D]
+  ): Endpoint[C, Either[E, D]] = {
+    val request: Request[C] = new Request[C] {
+
+      type UrlAndHeaders = endpoint.request.UrlAndHeaders
+
+      def matchAndParseHeadersDirective: Directive1[Validated[UrlAndHeaders]] =
+        endpoint.request.matchAndParseHeadersDirective
+
+      def parseEntityDirective(urlAndHeaders: UrlAndHeaders): Directive1[C] = {
+        endpoint.request.parseEntityDirective(urlAndHeaders).flatMap { a =>
+          middleware.serverAction(a) match {
+            //case Middleware.Bypass(b)   => StandardRoute(endpoint.response(b))
+            case Middleware.Conditional(Left(e)) =>
+              StandardRoute(endpoint.response(Left(e)))
+            case Middleware.Conditional(Right(c)) =>
+              Directives.provide(c)
+          }
+        }
+      }
+
+      def uri(c: C): Uri = 
+        endpoint.request.uri(middleware.fromNewRequest(c))
+    }
+    val response: Response[Either[E, D]] = {
+      endpoint.response.compose[Either[E, D]](_.map(middleware.fromNewResponse))
+    }
+    Endpoint(request, response)
+  }
+
   override def addRequestHeaders[A, H](
       currentRequest: Request[A],
       heads: RequestHeaders[H]

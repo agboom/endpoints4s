@@ -31,7 +31,34 @@ trait Middleware[Request, Response, NewRequest, NewResponse] {
   def fromNewRequest(newRequest: NewRequest): Request
 }
 
+trait MiddlewareF[F[_], Request, Response, NewRequest, NewResponse] {
+  def serverAction(request: Request): Middleware.ServerActionF[F, Response, NewRequest]
+  def toNewRequest(r: F[NewRequest]): NewRequest
+}
+
+trait ShortcircuitMiddleware[E, Request, Response, NewRequest, NewResponse] {
+  def serverAction(request: Request): Middleware.Conditional[E, NewRequest]
+
+  def fromNewResponse(newResponse: NewResponse): Response
+
+  def fromNewRequest(newRequest: NewRequest): Request
+}
+
 object Middleware {
+
+  type Id[T] = T
+
+  sealed trait ServerActionF[F[_], +Response, +NewRequest]
+
+  case class ContinueF[F[_], NewRequest](newRequest: F[NewRequest])
+      extends ServerActionF[F, Nothing, NewRequest]
+
+  //type MiddlewareF[F[_], Request, Response, NewRequest, NewResponse] =
+  //  Middleware[Request, F[Response], NewRequest]
+
+  //type RequestServerAction[Response, NewRequest] = ServerAction[Response, NewRequest, Nothing]
+
+  //type ResponseServerAction[Response, NewResponse] = ServerAction[Response, Nothing, NewResponse]
 
   /** The application of a middleware to an endpoint can either [[Bypass]] the endpoint
     * logic, or invoke its business logic (with [[Continue]]).
@@ -40,7 +67,9 @@ object Middleware {
     * @tparam NewRequest Information carried by the request of the endpoint resulting
     *                    from the application of the middleware to the wrapped endpoint.
     */
-  sealed trait ServerAction[+Response, +NewRequest]
+  sealed trait ServerAction2[+Response, +NewResponse, +NewRequest]
+
+  type ServerAction[Response, NewRequest] = ServerAction2[Response, Nothing, NewRequest]
 
   /** Bypass the logic of an endpoint, and immediately return the given `response`.
     *
@@ -56,5 +85,9 @@ object Middleware {
     *                       from the application of the middleware to the wrapped endpoint.
     */
   case class Continue[NewRequest](newRequest: NewRequest) extends ServerAction[Nothing, NewRequest]
+
+  case class Conditional[LeftResponse, NewRequest](
+      condition: Either[LeftResponse, NewRequest]
+  ) extends ServerAction[Either[LeftResponse, NewRequest], NewRequest]
 
 }
