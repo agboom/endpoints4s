@@ -16,6 +16,8 @@ import endpoints4s.{
   algebra
 }
 
+import algebra.{Middleware, ShortcircuitMiddleware}
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Akka-HTTP based interpreter that uses [[algebra.BuiltInErrors]] to model client and server errors.
@@ -361,6 +363,22 @@ trait EndpointsWithCustomErrors
       currentEndpoint: Endpoint[A, B],
       func: EndpointDocs => EndpointDocs
   ): Endpoint[A, B] = currentEndpoint
+
+  override def endpointMiddlewareF[E, A, B, C, D](
+      endpoint: Endpoint[A, Either[E, B]],
+      middleware: ShortcircuitMiddleware[E, A, B, C, D]
+  ): Endpoint[C, Either[E, D]] = {
+    val request: Request[C] = { c =>
+      middleware.clientAction(c) match {
+        case Middleware.Conditional(Left(e)) =>
+          ???
+        case Middleware.Conditional(Right(a)) =>
+          endpoint.request(a)
+      }
+    }
+    val response: Response[Either[E, D]] = endpoint.response
+    Endpoint(request, response)
+  }
 
   // Make sure to try decoding client and error responses
   private[client] def decodeResponse[A](

@@ -39,6 +39,8 @@ trait MiddlewareF[F[_], Request, Response, NewRequest, NewResponse] {
 trait ShortcircuitMiddleware[E, Request, Response, NewRequest, NewResponse] {
   def serverAction(request: Request): Middleware.Conditional[E, NewRequest]
 
+  def clientAction(newRequest: NewRequest): Middleware.Conditional[E, Request]
+
   def fromNewResponse(newResponse: NewResponse): Response
 
   def fromNewRequest(newRequest: NewRequest): Request
